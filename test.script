@@ -1,0 +1,31 @@
+;---BUILD-SCRIPT-FOR-AEROS-----------------------------------------------------------;
+;---NAPALMTORCH:WINDOWS--------------------------------------------------------------;
+;------------------------------------------------------------------------------------;
+
+;---SET-VARIABLES--------------------------------------------------------------------;
+setdir      C:/Users/Will/Desktop/AerOS
+setvar nasm C:/nasm.exe
+setvar gcc  C:/GCC/bin/i686-elf-gcc.exe
+setvar ld   C:/GCC/bin/i686-elf-ld.exe
+setvar vm   C:/Program Files (x86)/VMware/VMware Player/vmplayer.exe
+setvar ramfs Tools/RAMFS/bin/Debug/net7.0/RAMFS.exe
+
+;---CLEANUP-BIN-DIRECTORY------------------------------------------------------------;
+rmdir Bin
+mkdir Bin
+
+;---ASSEMBLE-KERNEL-FILES------------------------------------------------------------;
+recursive_io file_in.asm file_out.o Kernel/src Bin : nasm -felf32 #IN -o #OUT
+
+;---COMPILE-KERNEL-FILES-------------------------------------------------------------;
+recursive_io file_in.c file_out.o Kernel/src Bin : gcc -c #IN -o #OUT -IKernel/include -w -nostdlib -ffreestanding -Wall -Wextra -O2 -fno-rtti -fno-exceptions -fshort-enums
+
+;---LINK-KERNEL-FILES----------------------------------------------------------------;
+recursive .o Bin : ld -T Kernel/linker.ld -o Bin/kernel.elf #IN
+
+;---CREATE-RAMFS-IMAGE---------------------------------------------------------------;
+ramfs Kernel/build_ramdisk.script
+
+;---START-DEBUGGER-PIPE-AND-RUN-VMWARE-----------------------------------------------;
+pipe AerOS
+vm   Tools/VMWare/vmware_mach.vmx

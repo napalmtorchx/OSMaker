@@ -44,7 +44,7 @@ namespace OSMaker
         {
             Header("  !!  ", ConsoleColor.Red);
             Console.WriteLine(txt);
-            Console.Read();
+            Console.ReadLine();
             Environment.Exit(0);
         }
     }
