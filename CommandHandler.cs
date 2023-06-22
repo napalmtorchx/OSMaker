@@ -4,6 +4,7 @@ using System.IO.Pipes;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
+using DiscUtils.Iso9660;
 
 namespace OSMaker
 {
@@ -17,7 +18,6 @@ namespace OSMaker
 
         public static void Initialize()
         {
-            Pipe      = null;
             Connected = false;
             Thread    = null;
         }
@@ -51,6 +51,7 @@ namespace OSMaker
                 else if (cmd == "SETDIR") { SETDIR(args); }
                 else if (cmd == "RMDIR") { RMDIR(args); }
                 else if (cmd == "MKDIR") { MKDIR(args); }
+                else if (cmd == "MKISO") { MKISO(args); }
                 else if (cmd == "RECURSIVE_IO") { RECURSIVE_IO(args); }
                 else if (cmd == "RECURSIVE") { RECURSIVE(args); }
                 else if (cmd == "PIPE") { PIPE(args); }
@@ -180,41 +181,106 @@ namespace OSMaker
             Debug.Info("Created directory at '" + path + "'");
         }
 
+        private static void MKISO(List<string> args)
+        {
+            // mkiso Tools/Limine Images/AerOS.iso Images/ISO
+
+            if (args.Count < 4) { Debug.Error("Invalid arguments for 'MKISO'"); return; }
+            args.RemoveAt(0);
+
+            string limine_path = args[0].Replace("\\", "/");
+            if (!limine_path.EndsWith("/")) { limine_path += "/"; }
+            args.RemoveAt(0);
+
+            string output_file = args[0].Replace("\\", "/");
+            args.RemoveAt(0);
+
+            string path_in = args[0].Replace("\\", "/");
+            if (!path_in.EndsWith("/")) { path_in += "/"; }
+            args.RemoveAt(0);
+
+            string vol_ident = output_file.Substring(output_file.LastIndexOf('/') + 1);
+            vol_ident = Path.GetFileNameWithoutExtension(vol_ident);
+
+            CDBuilder iso = new CDBuilder()
+            {
+                UseJoliet = true,
+                VolumeIdentifier = vol_ident,
+                UpdateIsolinuxBootTable = true,
+            };
+
+            iso.AddFile("limine.sys", limine_path + "limine.sys");
+            iso.AddFile("limine.cfg", limine_path + "limine.cfg");
+
+            for (int i = 0; i < args.Count; i++) 
+            { 
+                string output = Path.GetFileName(args[i]);
+                iso.AddFile(output, args[i]); 
+                Debug.Info("Added file to iso image - Output:" + output + " Source:" + args[i]);
+            }
+
+            string[] files = Directory.GetFiles(path_in, "*.*", SearchOption.AllDirectories);
+            for (int i = 0; i < files.Length; i++) 
+            { 
+                string output = Path.GetFileName(files[i]);
+                iso.AddFile(output, files[i]); 
+                Debug.Info("Added file to iso image - Output:" + output + " Source:" + args[i]);
+            }
+        
+            iso.SetBootImage(File.OpenRead(limine_path + "limine-cd.bin"), BootDeviceEmulation.NoEmulation, 0);
+            iso.Build(output_file);
+            Debug.OK("Finished creating ISO image at '" + output_file + "'");
+        }
+
         private static void PIPE(List<string> args)
         {
             if (args.Count != 2) { Debug.Error("Invalid arguments for 'PIPE'"); return; }
 
             string name = args[1];
-
-            Pipe = new NamedPipeServerStream(name);
-            Thread = new Thread(PipeMain);
-            Thread.Start();
-            Debug.Info("Started pipe");
+            
+            Thread t = new Thread(() => PipeMain("AerOS"));
+            t.Start();
+        }
+        
+        private static void PipeMain(string name)
+        {
+            PipeStart(name);
         }
 
-        private static void PipeMain()
+        private static void PipeStart(string name)
         {
-            bool running = true;
-            while (running)
+            Pipe = new NamedPipeServerStream(name);
+            Thread = new Thread(() => { WaitForConnection(30); });
+            Thread.Start();
+            Debug.Info("Started pipe - Name:" + name);
+
+            Pipe.WaitForConnection();
+            Connected = true;
+
+            Debug.Info("Pipe connection established");
+
+            while (Pipe.IsConnected)
             {
-                if (Pipe == null) { return; }
-
-                Pipe.WaitForConnection();
-                Connected = Pipe.IsConnected;
-
-                if (!Connected) { Debug.Error("Failed to connect debugger pipe"); return; }
-                else { Debug.OK("Debugger pipe connected"); }
-
-                while (Pipe.IsConnected)
+               if (Pipe.CanRead)
+               {
+                    char c = (char)Pipe.ReadByte();
+                    Console.Write(c);
+               }
+            }
+        }
+        
+        public static void WaitForConnection(int timeout)
+        {
+            int time = 0, last = 0;
+            while (true)
+            {
+                if (Connected) { return; }
+                if (last != DateTime.Now.Second)
                 {
-                    while (!Pipe.CanRead);
-                    Console.Write((char)Pipe.ReadByte());
+                    last = DateTime.Now.Second;
+                    time++;
                 }
-
-                running   = false;
-                Connected = false;
-                Pipe      = null;
-                Debug.Info("Closed debugger pipe");
+                if (time >= timeout) { Debug.Error("Pipe connection timed out."); return; }
             }
         }
     }

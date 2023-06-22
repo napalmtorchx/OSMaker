@@ -26,6 +26,9 @@ recursive .o Bin : ld -T Kernel/linker.ld -o Bin/kernel.elf #IN
 ;---CREATE-RAMFS-IMAGE---------------------------------------------------------------;
 ramfs Kernel/build_ramdisk.script
 
+;---MAKE-ISO-IMAGE-------------------------------------------------------------------;
+mkiso Tools/Limine Images/AerOS.iso Images/ISO Bin/kernel.elf Images/ramdisk.img
+
 ;---START-DEBUGGER-PIPE-AND-RUN-VMWARE-----------------------------------------------;
 pipe AerOS
-vm   Tools/VMWare/vmware_mach.vmx
+vm Tools/VMWare/vmware_mach.vmx
