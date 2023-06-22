@@ -238,7 +238,7 @@ namespace OSMaker
 
             string name = args[1];
             
-            Thread t = new Thread(() => PipeMain("AerOS"));
+            Thread t = new Thread(() => PipeMain(name));
             t.Start();
         }
         
